@@ -143,4 +143,15 @@ class ProductionPublicAccessTest extends TestCase
             'CONTENT_TYPE' => 'application/json',
         ], '{invalid')->assertStatus(400);
     }
+
+    public function test_read_only_diagnostic_confirms_the_intake_schema_without_exposing_configuration(): void
+    {
+        config()->set('policyflow.public_demo_enabled', true);
+        config()->set('logging.default', 'stderr');
+
+        $this->artisan('policyflow:diagnose')
+            ->expectsOutput('database_connected: yes')
+            ->expectsOutput('intake_schema_ready: yes')
+            ->assertExitCode(0);
+    }
 }
