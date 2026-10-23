@@ -35,9 +35,7 @@
                 @if (app()->environment('production'))
                     @if (\App\Support\DemoMode::public())
                         <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                            <strong>Public synthetic demo.</strong> Browsing is open. To use mock write actions, enter the evaluator token supplied separately by the demo owner. Never enter real customer data.
-                            <label class="mt-3 block max-w-md"><span class="field-label">Evaluator write token</span><input id="demo-write-token" type="password" autocomplete="off" class="field" placeholder="Required for create and lifecycle actions"></label>
-                            <p class="mt-2 text-xs">The token stays in this browser tab and is sent only with demo API actions.</p>
+                            <strong>Public synthetic demo.</strong> Create requests and test mock insurer scenarios using invented trip details only. Never enter real customer data.
                         </div>
                     @else
                         <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">Public browsing is available. Demo records and write actions are not enabled yet.</div>

@@ -20,7 +20,6 @@ class ProductionPublicAccessTest extends TestCase
         app()->detectEnvironment(fn () => 'production');
         config()->set('app.debug', false);
         config()->set('policyflow.public_demo_enabled', false);
-        config()->set('policyflow.demo_write_token', 'test-write-token-with-at-least-32-characters');
     }
 
     protected function tearDown(): void
@@ -59,14 +58,13 @@ class ProductionPublicAccessTest extends TestCase
         $this->postJson('/api/mock-insurer/callback', [])->assertForbidden();
     }
 
-    public function test_enabled_demo_public_reads_only_synthetic_records_and_hides_token(): void
+    public function test_enabled_demo_public_reads_only_synthetic_records(): void
     {
         config()->set('policyflow.public_demo_enabled', true);
         $synthetic = $this->policy('DEMO-12345678-1234-1234-1234-123456789abc', 'DEMO-AGENT', 'Demo Traveler');
         $private = $this->policy('PRIVATE-1', 'PRIVATE-AGENT', 'Private Person');
 
-        $this->get('/')->assertOk()->assertSee('Evaluator write token')
-            ->assertDontSee('test-write-token-with-at-least-32-characters');
+        $this->get('/')->assertOk()->assertSee('Public synthetic demo')->assertDontSee('demo-write-token');
         $this->getJson('/api/policy-requests')->assertOk()
             ->assertJsonPath('pagination.total', 1)
             ->assertJsonPath('data.0.id', $synthetic->id)
@@ -77,10 +75,9 @@ class ProductionPublicAccessTest extends TestCase
         $this->getJson("/api/policy-requests/{$private->id}")->assertNotFound();
     }
 
-    public function test_authorized_synthetic_intake_can_open_details_and_validation_stays_strict(): void
+    public function test_public_synthetic_intake_can_open_details_and_validation_stays_strict(): void
     {
         config()->set('policyflow.public_demo_enabled', true);
-        $this->withHeader('X-PolicyFlow-Demo-Token', 'test-write-token-with-at-least-32-characters');
 
         $payload = [
             'client_request_id' => 'DEMO-12345678-1234-1234-1234-123456789abc',
@@ -107,9 +104,8 @@ class ProductionPublicAccessTest extends TestCase
         $this->assertDatabaseCount('policy_requests', 1);
     }
 
-    public function test_all_public_mutations_require_a_configured_write_token(): void
+    public function test_all_public_mutations_are_blocked_when_demo_is_disabled(): void
     {
-        config()->set('policyflow.public_demo_enabled', true);
         $policy = $this->policy('DEMO-12345678-1234-1234-1234-123456789abc', 'DEMO-AGENT', 'Demo Traveler');
 
         foreach ([
@@ -120,24 +116,31 @@ class ProductionPublicAccessTest extends TestCase
             '/api/mock-insurer/callback',
             "/api/mock-insurer/policy-requests/{$policy->id}/dispatch-callbacks",
         ] as $path) {
-            $this->withoutHeader('X-PolicyFlow-Demo-Token')->postJson($path, [])->assertForbidden();
-            $this->withHeader('X-PolicyFlow-Demo-Token', 'wrong-token')
-                ->postJson($path, [])->assertForbidden();
+            $this->postJson($path, [])->assertForbidden();
         }
 
         $this->getJson('/api/mock-insurer/status/unknown')->assertForbidden();
-        config()->set('policyflow.demo_write_token', null);
-        $this->withHeader('X-PolicyFlow-Demo-Token', 'test-write-token-with-at-least-32-characters')
-            ->postJson('/api/policy-requests', [])->assertForbidden();
     }
 
-    public function test_valid_token_still_cannot_modify_a_non_demo_policy(): void
+    public function test_public_demo_still_cannot_modify_a_non_demo_policy(): void
     {
         config()->set('policyflow.public_demo_enabled', true);
         $private = $this->policy('PRIVATE-1', 'PRIVATE-AGENT', 'Private Person');
-        $this->withHeader('X-PolicyFlow-Demo-Token', 'test-write-token-with-at-least-32-characters')
-            ->postJson("/api/policy-requests/{$private->id}/submit", ['scenario' => 'SUCCESS'])
+        $this->postJson("/api/policy-requests/{$private->id}/submit", ['scenario' => 'SUCCESS'])
             ->assertNotFound();
         $this->assertSame('VALIDATED', $private->fresh()->status);
+    }
+
+    public function test_public_demo_rejects_oversized_and_malformed_json(): void
+    {
+        config()->set('policyflow.public_demo_enabled', true);
+
+        $this->call('POST', '/api/policy-requests', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], str_repeat('x', 8193))->assertStatus(413);
+
+        $this->call('POST', '/api/policy-requests', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+        ], '{invalid')->assertStatus(400);
     }
 }

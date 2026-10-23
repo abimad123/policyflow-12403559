@@ -36,5 +36,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('demo-write', fn (Request $request) => app()->environment('production')
             ? Limit::perMinute(20)->by('write:'.$request->ip())
             : Limit::none());
+
+        RateLimiter::for('demo-intake', fn (Request $request) => app()->environment('production')
+            ? Limit::perMinute(8)->by('intake:'.$request->ip())
+            : Limit::none());
     }
 }

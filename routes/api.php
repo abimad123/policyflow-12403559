@@ -4,12 +4,12 @@ use App\Http\Controllers\MockCallbackController;
 use App\Http\Controllers\PolicyReliabilityController;
 use App\Http\Controllers\PolicyRequestController;
 use App\Http\Controllers\PolicySubmissionController;
-use App\Http\Middleware\EnsureLocalDemo;
 use App\Http\Middleware\EnsureDemoWrite;
+use App\Http\Middleware\EnsureLocalDemo;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['throttle:demo-write', EnsureDemoWrite::class])->group(function () {
-    Route::post('/policy-requests', [PolicyRequestController::class, 'store']);
+    Route::post('/policy-requests', [PolicyRequestController::class, 'store'])->middleware('throttle:demo-intake');
     Route::post('/policy-requests/{id}/submit', [PolicySubmissionController::class, 'store'])->whereNumber('id');
     Route::post('/policy-requests/{id}/retry', [PolicyReliabilityController::class, 'retry'])->whereNumber('id');
     Route::post('/policy-requests/{id}/reconcile', [PolicyReliabilityController::class, 'reconcile'])->whereNumber('id');

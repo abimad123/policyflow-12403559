@@ -4,17 +4,7 @@ const $ = (selector) => document.querySelector(selector);
 const page = document.body.dataset.page;
 const publicDemo = document.body.dataset.publicDemo === 'true';
 const production = document.body.dataset.production === 'true';
-const demoTokenKey = 'policyflow-demo-write-token';
-const hasWriteToken = () => !production || (publicDemo && Boolean(sessionStorage.getItem(demoTokenKey)));
-const tokenInput = $('#demo-write-token');
-if (tokenInput) {
-    tokenInput.value = sessionStorage.getItem(demoTokenKey) ?? '';
-    tokenInput.addEventListener('input', () => {
-        const token = tokenInput.value.trim();
-        token ? sessionStorage.setItem(demoTokenKey, token) : sessionStorage.removeItem(demoTokenKey);
-        document.dispatchEvent(new Event('demo-write-changed'));
-    });
-}
+const canWriteDemo = () => !production || publicDemo;
 const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(value ?? 0));
 const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const pretty = (value) => JSON.stringify(value, null, 2);
@@ -31,11 +21,10 @@ async function api(path, options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
     try {
-        const writeToken = publicDemo && options.method === 'POST' ? sessionStorage.getItem(demoTokenKey) : null;
         const response = await fetch(`/api${path}`, {
             ...options,
             signal: controller.signal,
-            headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...options.headers, ...(writeToken ? { 'X-PolicyFlow-Demo-Token': writeToken } : {}) },
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...options.headers },
         });
         const body = response.status >= 500
             ? { message: 'Policy data is temporarily unavailable. Please try again later.' }
@@ -122,8 +111,7 @@ if (page === 'index') {
 
 if (page === 'create') {
     const form = $('#create-form');
-    const updateCreateAccess = () => { $('#create-submit').disabled = !hasWriteToken(); };
-    document.addEventListener('demo-write-changed', updateCreateAccess);
+    const updateCreateAccess = () => { $('#create-submit').disabled = !canWriteDemo(); };
     updateCreateAccess();
     if (production) {
         form.elements.client_request_id.value = `DEMO-${crypto.randomUUID()}`;
@@ -142,7 +130,7 @@ if (page === 'create') {
     }
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (!hasWriteToken()) { notice(publicDemo ? 'Enter the evaluator write token before creating a request.' : 'Demo intake is not enabled yet.', false); return; }
+        if (!canWriteDemo()) { notice('Demo intake is not enabled yet.', false); return; }
         for (const element of form.querySelectorAll('[data-error-for]')) element.textContent = '';
         const button = $('#create-submit');
         setBusy(button, true, 'Create request');
@@ -203,10 +191,10 @@ if (page === 'show') {
         renderItems('#provider-events', policy.provider_events, (event) => `<div class="rounded-xl border border-slate-100 bg-slate-50 p-3"><strong class="text-sm">${safe(event.event_type)}</strong><p class="mt-1 break-all text-xs text-slate-600">${safe(event.event_id)}</p><p class="mt-1 text-xs text-slate-500">${event.applied ? 'Applied' : 'Duplicate / ignored'} · ${safe(time(event.created_at))}</p></div>`);
         const lastScenario = policy.issuance_attempts?.at(-1)?.scenario;
         const canDispatch = ['DELAYED_CALLBACK', 'DUPLICATE_CALLBACK'].includes(lastScenario) && ['PENDING_CONFIRMATION', 'ISSUED'].includes(policy.status);
-        $('#action-submit').disabled = busy || !hasWriteToken() || policy.status !== 'VALIDATED';
-        $('#action-retry').disabled = busy || !hasWriteToken() || policy.status !== 'FAILED';
-        $('#action-reconcile').disabled = busy || !hasWriteToken() || !['NEEDS_RECONCILIATION', 'PENDING_CONFIRMATION'].includes(policy.status);
-        $('#action-dispatch').disabled = busy || !hasWriteToken() || !canDispatch;
+        $('#action-submit').disabled = busy || !canWriteDemo() || policy.status !== 'VALIDATED';
+        $('#action-retry').disabled = busy || !canWriteDemo() || policy.status !== 'FAILED';
+        $('#action-reconcile').disabled = busy || !canWriteDemo() || !['NEEDS_RECONCILIATION', 'PENDING_CONFIRMATION'].includes(policy.status);
+        $('#action-dispatch').disabled = busy || !canWriteDemo() || !canDispatch;
         $('#action-hint').textContent = canDispatch && policy.status === 'ISSUED'
             ? 'Dispatch again to replay the same callback event; issuance stays unchanged.'
             : policy.status === 'ISSUED' ? 'Issued is terminal. No new submission is allowed.'
@@ -216,7 +204,6 @@ if (page === 'show') {
                             : 'Choose a mock scenario, then submit this validated request.';
     }
 
-    document.addEventListener('demo-write-changed', () => { if (policy) render(policy); });
 
     async function loadDetail() {
         if (busy) return;

@@ -20,8 +20,6 @@ class PublicDemoTest extends TestCase
         app()->detectEnvironment(fn () => 'production');
         config()->set('app.debug', false);
         config()->set('policyflow.public_demo_enabled', true);
-        config()->set('policyflow.demo_write_token', 'test-write-token-with-at-least-32-characters');
-        $this->withHeader('X-PolicyFlow-Demo-Token', 'test-write-token-with-at-least-32-characters');
     }
 
     protected function tearDown(): void
@@ -103,7 +101,7 @@ class PublicDemoTest extends TestCase
 
     public function test_public_demo_write_rate_limit_returns_429(): void
     {
-        for ($attempt = 0; $attempt < 20; $attempt++) {
+        for ($attempt = 0; $attempt < 8; $attempt++) {
             $this->postJson('/api/policy-requests', [])->assertUnprocessable();
         }
 
