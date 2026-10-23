@@ -27,6 +27,12 @@ CREATE DATABASE policyflow_test OWNER policyflow;
 
 File sessions, file cache, and synchronous jobs keep this stage independent of queue and cache tables.
 
+### Repeatable Postman check
+
+Import `examples/PolicyFlow.postman_collection.json` and run its four folders in order against `http://127.0.0.1:8000/api`. Each folder's create request generates a new fabricated `client_request_id`, stores the returned policy ID, and checks its subsequent calls. It leaves those new rows in the development database. Run a folder from its first request; later requests reuse the ID and key saved by that folder. The collection explicitly tests that `POST /policy-requests` returns one object under `data`, while `GET /policy-requests` returns an array under `data` with pagination metadata. A `409` from callback dispatch on a policy issued by the `SUCCESS` scenario is expected: only `DELAYED_CALLBACK` and `DUPLICATE_CALLBACK` queue a callback. Repeating dispatch for a policy issued through a queued callback returns `200` with duplicate deliveries.
+
+If Postman appears to show an older list after a `201` response, check the active request tab and its method and URL. The create response contains a single `data` object; the list response contains a `data` array. A repeated `(agent_id, client_request_id)` returns HTTP `200` with the original request. Clear any `status`, `page`, or `per_page` query parameters when checking the full list; the default page contains at most 15 rows. The collection's tests assert these distinctions after every fresh create.
+
 ## Intake API
 
 `POST /api/policy-requests` accepts JSON. All fields below are required. Plans are `BASIC`, `PLUS`, or `PREMIUM`; destinations are `DOMESTIC` or `INTERNATIONAL`; and `sum_insured` is one of `100000`, `300000`, or `500000`. Dates use `YYYY-MM-DD`; birth must precede trip start, and trip end must not precede trip start.

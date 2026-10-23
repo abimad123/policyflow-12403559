@@ -1,0 +1,790 @@
+{
+  "info": {
+    "name": "PolicyFlow local API verification",
+    "description": "Run folders in order, or run the whole collection. Each create request generates a fresh fabricated client_request_id. Uses only the local mock insurer.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1 - Intake and success",
+      "item": [
+        {
+          "name": "01 Create fresh policy",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"client_request_id\", \"PF-POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Created one policy\", () => { pm.response.to.have.status(201); pm.expect(j.data).to.be.an(\"object\"); pm.expect(j.data.id).to.be.a(\"number\"); pm.expect(j.data.status).to.eql(\"VALIDATED\"); pm.expect(j.data.premium_amount).to.eql(\"225.00\"); });",
+                  "pm.collectionVariables.set(\"policy_id\", String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_request_id\": \"{{client_request_id}}\",\n  \"agent_id\": \"POSTMAN-AGENT\",\n  \"customer_name\": \"Sample Customer\",\n  \"date_of_birth\": \"1998-04-10\",\n  \"destination\": \"INTERNATIONAL\",\n  \"trip_start\": \"2026-11-10\",\n  \"trip_end\": \"2026-11-14\",\n  \"plan_code\": \"PLUS\",\n  \"sum_insured\": 300000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests"
+          }
+        },
+        {
+          "name": "02 List includes the new policy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Newest policy is first\", () => { pm.response.to.have.status(200); pm.expect(j.data).to.be.an(\"array\"); pm.expect(j.data[0].id).to.eql(Number(pm.collectionVariables.get(\"policy_id\"))); pm.expect(j.pagination.total).to.be.greaterThan(0); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/policy-requests?per_page=100"
+          }
+        },
+        {
+          "name": "03 Detail matches created policy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Detail shows persisted request\", () => { pm.response.to.have.status(200); pm.expect(j.data.id).to.eql(Number(pm.collectionVariables.get(\"policy_id\"))); pm.expect(j.data.client_request_id).to.eql(pm.collectionVariables.get(\"client_request_id\")); pm.expect(j.data.premium_amount).to.eql(\"225.00\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}"
+          }
+        },
+        {
+          "name": "04 Repeat intake key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Duplicate reuses policy\", () => { pm.response.to.have.status(200); pm.expect(j.data.id).to.eql(Number(pm.collectionVariables.get(\"policy_id\"))); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_request_id\": \"{{client_request_id}}\",\n  \"agent_id\": \"POSTMAN-AGENT\",\n  \"customer_name\": \"Sample Customer\",\n  \"date_of_birth\": \"1998-04-10\",\n  \"destination\": \"INTERNATIONAL\",\n  \"trip_start\": \"2026-11-10\",\n  \"trip_end\": \"2026-11-14\",\n  \"plan_code\": \"PLUS\",\n  \"sum_insured\": 300000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests"
+          }
+        },
+        {
+          "name": "05 Reject invalid plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Validation error\", () => { pm.response.to.have.status(422); pm.expect(j.errors).to.have.property(\"plan_code\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_request_id\": \"{{client_request_id}}\",\n  \"agent_id\": \"POSTMAN-AGENT\",\n  \"customer_name\": \"Sample Customer\",\n  \"date_of_birth\": \"1998-04-10\",\n  \"destination\": \"INTERNATIONAL\",\n  \"trip_start\": \"2026-11-10\",\n  \"trip_end\": \"2026-11-14\",\n  \"plan_code\": \"GOLD\",\n  \"sum_insured\": 300000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests"
+          }
+        },
+        {
+          "name": "06 Submit successfully",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Issued exactly once\", () => { pm.response.to.have.status(200); pm.expect(j.data.status).to.eql(\"ISSUED\"); pm.expect(j.data.submission_attempt_count).to.eql(1); pm.expect(j.data.policy_number).to.be.a(\"string\"); });",
+                  "pm.collectionVariables.set(\"policy_number\", j.data.policy_number);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/submit"
+          }
+        },
+        {
+          "name": "07 Dispatch is correctly blocked without queued callback",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Expected conflict, not a failed issuance\", () => { pm.response.to.have.status(409); pm.expect(j.message).to.eql(\"No mock callback is queued for this request.\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/mock-insurer/policy-requests/{{policy_id}}/dispatch-callbacks"
+          }
+        },
+        {
+          "name": "08 Repeat submit cannot reissue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Still one issuance\", () => { pm.response.to.have.status(200); pm.expect(j.data.policy_number).to.eql(pm.collectionVariables.get(\"policy_number\")); pm.expect(j.data.submission_attempt_count).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/submit"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 - Temporary failure and keyed retry",
+      "item": [
+        {
+          "name": "01 Create fresh retry policy",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"client_request_id\", \"PF-POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Created one policy\", () => { pm.response.to.have.status(201); pm.expect(j.data).to.be.an(\"object\"); pm.expect(j.data.id).to.be.a(\"number\"); pm.expect(j.data.status).to.eql(\"VALIDATED\"); pm.expect(j.data.premium_amount).to.eql(\"225.00\"); });",
+                  "pm.collectionVariables.set(\"policy_id\", String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_request_id\": \"{{client_request_id}}\",\n  \"agent_id\": \"POSTMAN-AGENT\",\n  \"customer_name\": \"Sample Customer\",\n  \"date_of_birth\": \"1998-04-10\",\n  \"destination\": \"INTERNATIONAL\",\n  \"trip_start\": \"2026-11-10\",\n  \"trip_end\": \"2026-11-14\",\n  \"plan_code\": \"PLUS\",\n  \"sum_insured\": 300000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests"
+          }
+        },
+        {
+          "name": "02 Submit temporary failure",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Failure recorded\", () => { pm.response.to.have.status(200); pm.expect(j.data.status).to.eql(\"FAILED\"); pm.expect(j.data.policy_number).to.be.null; pm.expect(j.data.submission_attempt_count).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"TEMPORARY_FAILURE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/submit"
+          }
+        },
+        {
+          "name": "03 Retry to success",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"retry_key\", \"RETRY-\" + pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Retry issues once\", () => { pm.response.to.have.status(200); pm.expect(j.data.status).to.eql(\"ISSUED\"); pm.expect(j.data.premium_amount).to.eql(\"225.00\"); pm.expect(j.data.submission_attempt_count).to.eql(2); });",
+                  "pm.collectionVariables.set(\"policy_number\", j.data.policy_number);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"retry_key\": \"{{retry_key}}\",\n  \"scenario\": \"SUCCESS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/retry"
+          }
+        },
+        {
+          "name": "04 Repeat same retry key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Retry is idempotent\", () => { pm.response.to.have.status(200); pm.expect(j.data.policy_number).to.eql(pm.collectionVariables.get(\"policy_number\")); pm.expect(j.data.submission_attempt_count).to.eql(2); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"retry_key\": \"{{retry_key}}\",\n  \"scenario\": \"SUCCESS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/retry"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Duplicate callback",
+      "item": [
+        {
+          "name": "01 Create fresh callback policy",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"client_request_id\", \"PF-POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Created one policy\", () => { pm.response.to.have.status(201); pm.expect(j.data).to.be.an(\"object\"); pm.expect(j.data.id).to.be.a(\"number\"); pm.expect(j.data.status).to.eql(\"VALIDATED\"); pm.expect(j.data.premium_amount).to.eql(\"225.00\"); });",
+                  "pm.collectionVariables.set(\"policy_id\", String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_request_id\": \"{{client_request_id}}\",\n  \"agent_id\": \"POSTMAN-AGENT\",\n  \"customer_name\": \"Sample Customer\",\n  \"date_of_birth\": \"1998-04-10\",\n  \"destination\": \"INTERNATIONAL\",\n  \"trip_start\": \"2026-11-10\",\n  \"trip_end\": \"2026-11-14\",\n  \"plan_code\": \"PLUS\",\n  \"sum_insured\": 300000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests"
+          }
+        },
+        {
+          "name": "02 Submit duplicate-callback scenario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Awaiting callback\", () => { pm.response.to.have.status(200); pm.expect(j.data.status).to.eql(\"PENDING_CONFIRMATION\"); pm.expect(j.data.policy_number).to.be.null; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"DUPLICATE_CALLBACK\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/submit"
+          }
+        },
+        {
+          "name": "03 Dispatch the same event three times",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Only first callback applies\", () => { pm.response.to.have.status(200); pm.expect(j.data.status).to.eql(\"ISSUED\"); pm.expect(j.deliveries).to.have.length(3); pm.expect(j.deliveries.map(x => x.duplicate)).to.eql([false, true, true]); pm.expect(j.data.submission_attempt_count).to.eql(1); });",
+                  "pm.collectionVariables.set(\"policy_number\", j.data.policy_number);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/mock-insurer/policy-requests/{{policy_id}}/dispatch-callbacks"
+          }
+        },
+        {
+          "name": "04 Replay callback dispatch",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Replay cannot reissue\", () => { pm.response.to.have.status(200); pm.expect(j.data.policy_number).to.eql(pm.collectionVariables.get(\"policy_number\")); pm.expect(j.deliveries.every(x => x.duplicate)).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/mock-insurer/policy-requests/{{policy_id}}/dispatch-callbacks"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 - Timeout and reconciliation",
+      "item": [
+        {
+          "name": "01 Create fresh timeout policy",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"client_request_id\", \"PF-POSTMAN-\" + pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Created one policy\", () => { pm.response.to.have.status(201); pm.expect(j.data).to.be.an(\"object\"); pm.expect(j.data.id).to.be.a(\"number\"); pm.expect(j.data.status).to.eql(\"VALIDATED\"); pm.expect(j.data.premium_amount).to.eql(\"225.00\"); });",
+                  "pm.collectionVariables.set(\"policy_id\", String(j.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_request_id\": \"{{client_request_id}}\",\n  \"agent_id\": \"POSTMAN-AGENT\",\n  \"customer_name\": \"Sample Customer\",\n  \"date_of_birth\": \"1998-04-10\",\n  \"destination\": \"INTERNATIONAL\",\n  \"trip_start\": \"2026-11-10\",\n  \"trip_end\": \"2026-11-14\",\n  \"plan_code\": \"PLUS\",\n  \"sum_insured\": 300000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests"
+          }
+        },
+        {
+          "name": "02 Submit timeout-after-issue scenario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Outcome stays uncertain\", () => { pm.response.to.have.status(200); pm.expect(j.data.status).to.eql(\"NEEDS_RECONCILIATION\"); pm.expect(j.data.policy_number).to.be.null; pm.expect(j.data.submission_attempt_count).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scenario\": \"TIMEOUT_AFTER_ISSUE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/submit"
+          }
+        },
+        {
+          "name": "03 Repeat submit is blocked",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"No blind reissue\", () => { pm.response.to.have.status(409); pm.expect(j.message).to.include(\"NEEDS_RECONCILIATION\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/submit"
+          }
+        },
+        {
+          "name": "04 Reconcile provider status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Confirmed without second attempt\", () => { pm.response.to.have.status(200); pm.expect(j.resolved).to.eql(true); pm.expect(j.data.status).to.eql(\"ISSUED\"); pm.expect(j.data.submission_attempt_count).to.eql(1); });",
+                  "pm.collectionVariables.set(\"policy_number\", j.data.policy_number);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/reconcile"
+          }
+        },
+        {
+          "name": "05 Repeat reconciliation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test(\"Reconciliation is idempotent\", () => { pm.response.to.have.status(200); pm.expect(j.data.policy_number).to.eql(pm.collectionVariables.get(\"policy_number\")); pm.expect(j.data.submission_attempt_count).to.eql(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/policy-requests/{{policy_id}}/reconcile"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000/api"
+    },
+    {
+      "key": "client_request_id",
+      "value": ""
+    },
+    {
+      "key": "policy_id",
+      "value": ""
+    },
+    {
+      "key": "policy_number",
+      "value": ""
+    },
+    {
+      "key": "retry_key",
+      "value": ""
+    }
+  ]
+}

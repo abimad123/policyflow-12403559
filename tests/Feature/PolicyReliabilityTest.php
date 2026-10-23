@@ -149,6 +149,22 @@ class PolicyReliabilityTest extends TestCase
         $this->assertDatabaseCount('policy_state_histories', 4);
     }
 
+    public function test_dispatch_without_a_queued_callback_returns_a_meaningful_conflict(): void
+    {
+        $id = $this->intake();
+        $this->postJson("/api/policy-requests/{$id}/submit")
+            ->assertOk()->assertJsonPath('data.status', 'ISSUED');
+
+        $this->postJson("/api/mock-insurer/policy-requests/{$id}/dispatch-callbacks")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'No mock callback is queued for this request.');
+
+        $this->assertDatabaseCount('provider_events', 0);
+        $this->assertDatabaseCount('issuance_attempts', 1);
+        $this->assertDatabaseCount('mock_provider_policies', 1);
+        $this->assertSame('ISSUED', PolicyRequest::findOrFail($id)->status);
+    }
+
     public function test_invalid_and_conflicting_callbacks_cannot_issue_or_regress(): void
     {
         $id = $this->intake();

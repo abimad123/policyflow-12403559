@@ -68,6 +68,35 @@ class PolicyRequestIntakeTest extends TestCase
         $this->assertSame('225.00', PolicyRequest::firstOrFail()->premium_amount);
     }
 
+    public function test_new_intake_is_immediately_visible_in_list_and_detail(): void
+    {
+        $created = $this->postJson('/api/policy-requests', $this->payload())
+            ->assertCreated()
+            ->assertJsonPath('data.client_request_id', 'AGT-2026-0001')
+            ->assertJsonPath('data.status', 'VALIDATED');
+
+        $id = $created->json('data.id');
+        $this->assertIsArray($created->json('data'));
+        $this->assertArrayNotHasKey(0, $created->json('data'));
+
+        $this->getJson('/api/policy-requests?per_page=1&page=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $id)
+            ->assertJsonPath('pagination.total', 1);
+
+        $this->getJson("/api/policy-requests/{$id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $id)
+            ->assertJsonPath('data.client_request_id', 'AGT-2026-0001')
+            ->assertJsonPath('data.premium_amount', '225.00');
+
+        $this->postJson('/api/policy-requests', $this->payload())
+            ->assertOk()
+            ->assertJsonPath('data.id', $id);
+        $this->assertDatabaseCount('policy_requests', 1);
+    }
+
     public function test_duplicate_after_issuance_returns_same_record_with_current_status_and_original_premium(): void
     {
         $first = $this->postJson('/api/policy-requests', $this->payload())->assertCreated()->json('data');
