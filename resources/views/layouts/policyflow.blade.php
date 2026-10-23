@@ -19,7 +19,7 @@
             </div>
             <nav aria-label="Main navigation" class="flex gap-2 px-4 pb-4 lg:mt-8 lg:flex-col lg:pb-0">
                 <a href="{{ route('policies.index') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.index') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">Overview</a>
-                @if (\App\Support\DemoMode::available())<a href="{{ route('policies.create') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.create') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">New policy request</a>@endif
+                <a href="{{ route('policies.create') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.create') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">New policy request</a>
             </nav>
             <div class="hidden border-t border-slate-100 px-7 py-5 text-xs leading-5 text-slate-500 lg:absolute lg:bottom-0 lg:block">
                 Mock insurer demonstration.<br>Use synthetic data only; records persist in the demo database.
@@ -29,7 +29,7 @@
         <div class="min-w-0 flex-1 lg:ml-64">
             <header class="flex min-h-18 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
                 <div><p class="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600">Issuance & reconciliation</p><h1 class="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">@yield('heading')</h1></div>
-                @if (\App\Support\DemoMode::available())<a href="{{ route('policies.create') }}" class="btn-primary hidden sm:inline-flex">+ New request</a>@endif
+                <a href="{{ route('policies.create') }}" class="btn-primary hidden sm:inline-flex">+ New request</a>
             </header>
             <main class="mx-auto max-w-7xl space-y-6 px-5 py-7 sm:px-8 sm:py-9">
                 @if (app()->environment('production'))

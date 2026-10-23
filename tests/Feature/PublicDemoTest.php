@@ -49,12 +49,12 @@ class PublicDemoTest extends TestCase
     {
         config()->set('policyflow.public_demo_enabled', false);
         $this->get('/')->assertOk();
-        $this->get('/policies/new')->assertNotFound();
+        $this->get('/policies/new')->assertOk();
         $this->postJson('/api/mock-insurer/callback', [])->assertForbidden();
         config()->set('policyflow.public_demo_enabled', true);
         config()->set('app.debug', true);
         $this->get('/')->assertOk();
-        $this->get('/policies/new')->assertNotFound();
+        $this->get('/policies/new')->assertOk();
         config()->set('app.debug', false);
         $this->get('/')->assertOk()->assertSee('Mock demo');
         $this->get('/policies/new')->assertOk()->assertSee('Never enter real customer data');

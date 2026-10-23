@@ -7,7 +7,7 @@
 <div class="grid gap-4 sm:grid-cols-3">
     <div class="card p-5"><p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Matching requests</p><p id="total-count" class="mt-3 text-3xl font-semibold tracking-tight">—</p><p class="muted mt-1">Across all matching pages</p></div>
     <div class="card p-5"><p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Current view</p><p id="visible-count" class="mt-3 text-3xl font-semibold tracking-tight">—</p><p class="muted mt-1">Requests on this page</p></div>
-    <div class="card flex flex-col justify-between bg-slate-900 p-5 text-white"><div><p class="text-xs font-semibold uppercase tracking-wider text-indigo-200">Reliability lab</p><p class="mt-2 text-lg font-semibold">{{ \App\Support\DemoMode::available() ? 'Run the complete lifecycle' : 'Public read-only overview' }}</p></div>@if (\App\Support\DemoMode::available())<a href="{{ route('policies.create') }}" class="mt-4 text-sm font-semibold text-indigo-200 hover:text-white">Create a request →</a>@endif</div>
+    <div class="card flex flex-col justify-between bg-slate-900 p-5 text-white"><div><p class="text-xs font-semibold uppercase tracking-wider text-indigo-200">Reliability lab</p><p class="mt-2 text-lg font-semibold">{{ \App\Support\DemoMode::available() ? 'Run the complete lifecycle' : 'Explore the demo request form' }}</p></div><a href="{{ route('policies.create') }}" class="mt-4 text-sm font-semibold text-indigo-200 hover:text-white">New policy request →</a></div>
 </div>
 
 <section class="card overflow-hidden" aria-label="Policy requests">

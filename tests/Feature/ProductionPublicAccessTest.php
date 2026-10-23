@@ -48,11 +48,11 @@ class ProductionPublicAccessTest extends TestCase
 
     public function test_homepage_is_public_but_records_and_writes_are_closed_when_demo_is_off(): void
     {
-        $this->get('/')->assertOk()->assertSee('Public browsing is available');
+        $this->get('/')->assertOk()->assertSee('Public browsing is available')->assertSee('New policy request');
         $this->getJson('/api/policy-requests')->assertOk()
             ->assertJsonPath('pagination.total', 0)
             ->assertJsonPath('demo_enabled', false);
-        $this->get('/policies/new')->assertNotFound();
+        $this->get('/policies/new')->assertOk()->assertSee('Demo submission is currently disabled');
         $this->get('/policies/1')->assertNotFound();
         $this->getJson('/api/policy-requests/1')->assertNotFound();
         $this->postJson('/api/policy-requests', [])->assertForbidden();
@@ -75,6 +75,36 @@ class ProductionPublicAccessTest extends TestCase
         $this->get("/policies/{$synthetic->id}")->assertOk();
         $this->getJson("/api/policy-requests/{$synthetic->id}")->assertOk();
         $this->getJson("/api/policy-requests/{$private->id}")->assertNotFound();
+    }
+
+    public function test_authorized_synthetic_intake_can_open_details_and_validation_stays_strict(): void
+    {
+        config()->set('policyflow.public_demo_enabled', true);
+        $this->withHeader('X-PolicyFlow-Demo-Token', 'test-write-token-with-at-least-32-characters');
+
+        $payload = [
+            'client_request_id' => 'DEMO-12345678-1234-1234-1234-123456789abc',
+            'agent_id' => 'DEMO-AGENT',
+            'customer_name' => 'Demo Traveler',
+            'date_of_birth' => '1990-01-01',
+            'destination' => 'DOMESTIC',
+            'trip_start' => '2026-11-10',
+            'trip_end' => '2026-11-14',
+            'plan_code' => 'BASIC',
+            'sum_insured' => 100000,
+        ];
+
+        $this->postJson('/api/policy-requests', [...$payload, 'trip_end' => '2026-11-09'])
+            ->assertUnprocessable()->assertJsonValidationErrors('trip_end');
+        $id = $this->postJson('/api/policy-requests', $payload)
+            ->assertCreated()->assertJsonPath('data.status', 'VALIDATED')->json('data.id');
+        $this->postJson('/api/policy-requests', $payload)
+            ->assertOk()->assertJsonPath('data.id', $id);
+        $this->get("/policies/{$id}")->assertOk();
+        $this->getJson("/api/policy-requests/{$id}")->assertOk()
+            ->assertJsonPath('data.id', $id)
+            ->assertJsonStructure(['data' => ['state_history', 'issuance_attempts', 'provider_events']]);
+        $this->assertDatabaseCount('policy_requests', 1);
     }
 
     public function test_all_public_mutations_require_a_configured_write_token(): void

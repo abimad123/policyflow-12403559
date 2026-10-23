@@ -3,8 +3,9 @@ import './bootstrap';
 const $ = (selector) => document.querySelector(selector);
 const page = document.body.dataset.page;
 const publicDemo = document.body.dataset.publicDemo === 'true';
+const production = document.body.dataset.production === 'true';
 const demoTokenKey = 'policyflow-demo-write-token';
-const hasWriteToken = () => !publicDemo || Boolean(sessionStorage.getItem(demoTokenKey));
+const hasWriteToken = () => !production || (publicDemo && Boolean(sessionStorage.getItem(demoTokenKey)));
 const tokenInput = $('#demo-write-token');
 if (tokenInput) {
     tokenInput.value = sessionStorage.getItem(demoTokenKey) ?? '';
@@ -124,7 +125,7 @@ if (page === 'create') {
     const updateCreateAccess = () => { $('#create-submit').disabled = !hasWriteToken(); };
     document.addEventListener('demo-write-changed', updateCreateAccess);
     updateCreateAccess();
-    if (document.body.dataset.publicDemo === 'true') {
+    if (production) {
         form.elements.client_request_id.value = `DEMO-${crypto.randomUUID()}`;
         form.elements.agent_id.value = 'DEMO-AGENT';
         form.elements.customer_name.value = 'Demo Traveler';
@@ -141,7 +142,7 @@ if (page === 'create') {
     }
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (!hasWriteToken()) { notice('Enter the evaluator write token before creating a request.', false); return; }
+        if (!hasWriteToken()) { notice(publicDemo ? 'Enter the evaluator write token before creating a request.' : 'Demo intake is not enabled yet.', false); return; }
         for (const element of form.querySelectorAll('[data-error-for]')) element.textContent = '';
         const button = $('#create-submit');
         setBusy(button, true, 'Create request');
