@@ -4,7 +4,7 @@ Fault-tolerant insurance issuance and reconciliation engine for the Trippers Shi
 
 ## Status
 
-Stages 2–4 implement intake, premium snapshots, deterministic mock issuance, callbacks, keyed retries, reconciliation, and an audit trail. This is a local assessment system with no real insurer connection.
+Stages 2–4 implement intake, premium snapshots, deterministic mock issuance, callbacks, keyed retries, reconciliation, and an audit trail. A local Blade and Tailwind interface demonstrates these APIs. This is a local assessment system with no real insurer connection.
 
 ## Local setup
 
@@ -14,7 +14,21 @@ Stages 2–4 implement intake, premium snapshots, deterministic mock issuance, c
 4. Run `php artisan key:generate`.
 5. Check the connection with `php artisan tinker --execute="dump(DB::select('SELECT current_database() AS database, current_user AS role'))"`. This query does not modify the database.
 6. Run `php artisan migrate` for the development database.
-7. Run `php artisan test` and `php artisan serve`. PHPUnit forces PostgreSQL database `policyflow_test`; tests must never run against the development database. The test database must exist before testing, and the role must be able to create tables there.
+7. Run `npm install` and `npm run build` (or `npm run dev` in a second terminal). The generated `package-lock.json` makes subsequent installs repeatable with `npm ci`.
+8. Run `php artisan test` and `php artisan serve`. PHPUnit forces PostgreSQL database `policyflow_test`; tests must never run against the development database. The test database must exist before testing, and the role must be able to create tables there.
+
+### Local web demo
+
+With `APP_ENV=local`, open `http://127.0.0.1:8000/`. The dashboard lists the newest policies first with status filtering, pagination, and refresh. Select **New request** to create a policy. The form shows HTTP status, field validation errors, and the API response; a successful or idempotently reused request provides a link to its detail page. The detail page shows the premium snapshot, state history, insurer attempts, provider events, and complete JSON responses. Controls are enabled according to the current state. All actions call the existing `/api` endpoints; the pages do not calculate premiums or issue policies themselves.
+
+For a repeatable walkthrough, create a request with a fresh `client_request_id` for an agent, then open it:
+
+1. **Success:** leave `SUCCESS` selected and choose **Submit**. The request becomes `ISSUED`; submit/retry/reconcile are disabled. Refresh to verify persisted state.
+2. **Temporary failure and retry:** create another request, select `TEMPORARY_FAILURE`, and submit. The request becomes `FAILED`. Select `SUCCESS` and choose **Retry**. The displayed retry key is reused for the same retry operation; use **New key** only for a deliberate new attempt. The request becomes `ISSUED` with two attempts and an unchanged premium.
+3. **Timeout and reconciliation:** create another request, select `TIMEOUT_AFTER_ISSUE`, and submit. The request becomes `NEEDS_RECONCILIATION` without assuming failure. Choose **Reconcile** to confirm the mock provider record and reach `ISSUED` without resubmission.
+4. **Duplicate callbacks:** create another request, select `DUPLICATE_CALLBACK`, and submit. The request becomes `PENDING_CONFIRMATION`. Choose **Dispatch callback**; three deliveries share one event ID and only the first applies issuance. Choose **Dispatch callback** again to replay the event and inspect the duplicate flags and provider events. `DELAYED_CALLBACK` follows the same path with one delivery per dispatch. A request submitted with `SUCCESS` has no queued callback, so dispatch is disabled; calling that API directly returns a meaningful `409`.
+
+The web UI and mock callback receiver are available only when `APP_ENV` is `local` or `testing`; other environments return `404`. The callback receiver is unauthenticated and must not be exposed as a real insurer integration. There is no production deployment configuration or authentication layer in this assignment. Before hosting on `abijith.me`, inspect the actual hosting environment and add authentication/authorization for policy actions and a verified provider callback scheme. No deployment or DNS change is part of this setup.
 
 For a fresh PostgreSQL instance, open `psql` as an administrator and run the following, skipping any role or database that already exists. `\password` prompts for a local password without putting it in shell history.
 
@@ -137,7 +151,7 @@ To exercise callback validation directly, retrieve the mock policy number from t
 }
 ```
 
-The callback verifies the reference and policy number against the mock's internal record. It returns HTTP `200` with `{"data":{...},"event_id":"mock-event-1","duplicate":false}`. Repeating the event or sending another matching issued event returns `duplicate:true` and does not issue again. Invalid fields return `422`, unknown references return `404`, and conflicting events or states return `409`. The callback route is an unauthenticated **local mock** endpoint; it needs provider authentication before any real integration.
+The callback verifies the reference and policy number against the mock's internal record. It returns HTTP `200` with `{"data":{...},"event_id":"mock-event-1","duplicate":false}`. Repeating the event or sending another matching issued event returns `duplicate:true` and does not issue again. Invalid fields return `422`, unknown references return `404`, and conflicting events or states return `409`. The callback route is an unauthenticated **local mock** endpoint restricted to local/testing environments; it needs provider authentication before any real integration.
 
 Call `POST /api/policy-requests/{id}/reconcile` to query the local provider record after a timeout or pending response. A confirmed policy returns HTTP `200` with `{"data":{...},"resolved":true}` and transitions to `ISSUED`. If the mock lookup is unavailable or returns no record, HTTP `202` returns `resolved:false` and preserves the uncertain state; it never assumes a missing answer means failure. Invalid states return `409`. Repeating reconciliation after issuance returns the existing record.
 
