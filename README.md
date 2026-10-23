@@ -28,7 +28,38 @@ For a repeatable walkthrough, create a request with a fresh `client_request_id` 
 3. **Timeout and reconciliation:** create another request, select `TIMEOUT_AFTER_ISSUE`, and submit. The request becomes `NEEDS_RECONCILIATION` without assuming failure. Choose **Reconcile** to confirm the mock provider record and reach `ISSUED` without resubmission.
 4. **Duplicate callbacks:** create another request, select `DUPLICATE_CALLBACK`, and submit. The request becomes `PENDING_CONFIRMATION`. Choose **Dispatch callback**; three deliveries share one event ID and only the first applies issuance. Choose **Dispatch callback** again to replay the event and inspect the duplicate flags and provider events. `DELAYED_CALLBACK` follows the same path with one delivery per dispatch. A request submitted with `SUCCESS` has no queued callback, so dispatch is disabled; calling that API directly returns a meaningful `409`.
 
-The web UI and mock callback receiver are available only when `APP_ENV` is `local` or `testing`; other environments return `404`. The callback receiver is unauthenticated and must not be exposed as a real insurer integration. There is no production deployment configuration or authentication layer in this assignment. Before hosting on `abijith.me`, inspect the actual hosting environment and add authentication/authorization for policy actions and a verified provider callback scheme. No deployment or DNS change is part of this setup.
+The web UI and mock callback receiver are available only when `APP_ENV` is `local` or `testing`; other environments return `404`. The callback receiver is unauthenticated and must not be exposed as a real insurer integration. The Docker packaging below does not add production authentication. Before hosting on `abijith.me`, inspect the actual hosting environment and add authentication/authorization for policy actions and a verified provider callback scheme. No deployment or DNS change is part of this setup.
+
+## Render Docker deployment preparation
+
+The root [`Dockerfile`](Dockerfile) builds locked npm assets and locked Composer production dependencies, then serves Laravel through Apache with `public/` as the document root. [`docker/start.sh`](docker/start.sh) binds Apache to Render's runtime `PORT` (default `10000`) and refuses to start without `APP_KEY`. The image contains no `.env`, local logs, test data, `node_modules`, or development `vendor` directory; runtime settings and secrets come from Render environment variables. Laravel and Apache write logs to standard error/output. The file system is ephemeral, so the default file session/cache stores are suitable only for a single instance and are lost on restart.
+
+These are the **Render settings to use after reviewing and publishing this commit**. No Render service or DNS record is created by this repository change:
+
+1. Confirm Render is connected to the intended GitHub repository. The current local `origin` still points to `policyflow-insurance-engine.git`; verify and correct that separately before using a repository in Render. Create a Render PostgreSQL database and keep its **internal** connection URL private.
+2. Create a **Web Service** with **Docker** as its runtime. Leave Root Directory blank (repository root); set Dockerfile Path to `./Dockerfile`. Docker services have no separate Build Command. Leave Docker Command blank so the image's `ENTRYPOINT` and `CMD` start Apache. Set Health Check Path to `/up`. Render supplies `PORT`; the image defaults to `10000` if it is absent.
+3. Add environment variables in Render's Environment settings, never in source or Docker build arguments:
+
+   | Key | Value |
+   | --- | --- |
+   | `APP_ENV` | `production` |
+   | `APP_DEBUG` | `false` |
+   | `APP_KEY` | One stable key generated locally with `php artisan key:generate --show`; paste it into Render's secret environment setting and do not rotate it casually. |
+   | `APP_URL` | The final `https://<service>.onrender.com` URL, then the custom HTTPS URL after domain setup. |
+   | `ASSET_URL` | The same HTTPS origin as `APP_URL`, to keep Vite asset links secure behind Render's TLS proxy. |
+   | `DB_CONNECTION` | `pgsql` |
+   | `DB_URL` | The Render PostgreSQL **internal** URL. This app's `config/database.php` reads `DB_URL`, not `DATABASE_URL`. |
+   | `LOG_CHANNEL` | `stderr` |
+   | `LOG_LEVEL` | `warning` (or the required operational level). |
+
+   The image defaults to synchronous jobs and file session/cache storage. Keep `APP_KEY` and `DB_URL` stable across deploys. Do not set `APP_ENV=local` on a publicly reachable service merely to expose mock controls.
+
+4. On a Render plan that supports a **Pre-Deploy Command**, set it to `php artisan migrate --force`. It applies pending migrations before traffic moves to the new image; it does not run `migrate:fresh`, truncate tables, or seed data. Review every future migration for backward compatibility because the previous image may serve traffic while migrations run. Render's pre-deploy command runs on a separate instance, so only database changes persist. If your plan lacks pre-deploy commands, arrange a controlled one-off migration before exposing the new version; do not silently run migrations in every web container start.
+5. After a deployment is deliberately approved, check `/up`, inspect Render logs, verify a read-only policy list against the new database, and only then exercise write endpoints with fabricated data. `/up` proves HTTP readiness, not PostgreSQL connectivity. The public `/` UI and mock callback receiver intentionally return `404` in production.
+
+**Public launch is blocked by application access control:** the existing policy APIs have no production authentication or authorization, and the Blade demo is deliberately local-only. The Docker image and port behavior were tested locally, but a live Render database, Render environment settings, authentication design, and custom domain were not verified. Add production API/UI access control and review the callback trust model before making a public service or attaching `abijith.me`.
+
+## Local PostgreSQL bootstrap and API checks
 
 For a fresh PostgreSQL instance, open `psql` as an administrator and run the following, skipping any role or database that already exists. `\password` prompts for a local password without putting it in shell history.
 
