@@ -7,7 +7,7 @@
     <title>@yield('title', 'Dashboard') · PolicyFlow</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body data-page="@yield('page')" @hasSection('policy-id') data-policy-id="@yield('policy-id')" @endif>
+<body data-page="@yield('page')" data-public-demo="{{ \App\Support\DemoMode::public() ? 'true' : 'false' }}" @hasSection('policy-id') data-policy-id="@yield('policy-id')" @endif>
     <div class="min-h-screen lg:flex">
         <aside class="border-b border-slate-200 bg-white lg:fixed lg:inset-y-0 lg:w-64 lg:border-b-0 lg:border-r">
             <div class="flex h-18 items-center justify-between px-5 lg:px-7">
@@ -15,14 +15,14 @@
                     <span class="grid h-9 w-9 place-items-center rounded-xl bg-indigo-600 text-lg font-bold text-white">P</span>
                     <span><strong class="block text-lg leading-5 tracking-tight">PolicyFlow</strong><small class="text-xs font-medium text-slate-500">Insurance operations</small></span>
                 </a>
-                <span class="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">Local demo</span>
+                <span class="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">Mock demo</span>
             </div>
             <nav aria-label="Main navigation" class="flex gap-2 px-4 pb-4 lg:mt-8 lg:flex-col lg:pb-0">
                 <a href="{{ route('policies.index') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.index') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">Overview</a>
                 <a href="{{ route('policies.create') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.create') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">New policy request</a>
             </nav>
             <div class="hidden border-t border-slate-100 px-7 py-5 text-xs leading-5 text-slate-500 lg:absolute lg:bottom-0 lg:block">
-                Local mock insurer workspace.<br>Customer data stays in your configured database.
+                Mock insurer demonstration.<br>Use synthetic data only; records persist in the demo database.
             </div>
         </aside>
 

@@ -2,6 +2,10 @@
 set -eu
 
 if [ "${1:-}" = 'apache2-foreground' ]; then
+    if [ "${APP_ENV:-production}" = 'production' ] && [ "${APP_DEBUG:-false}" != 'false' ] && [ "${APP_DEBUG:-false}" != '0' ]; then
+        echo 'APP_DEBUG must be false in production' >&2
+        exit 1
+    fi
     if [ -z "${APP_KEY:-}" ]; then
         echo 'APP_KEY must be provided at runtime' >&2
         exit 1

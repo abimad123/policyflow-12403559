@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Services\MockInsurer;
+use App\Support\DemoMode;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -26,7 +27,7 @@ class SubmitPolicyRequestRequest extends FormRequest
                     MockInsurer::DELAYED_CALLBACK,
                     MockInsurer::DUPLICATE_CALLBACK,
                 ]),
-                Rule::prohibitedIf(! in_array(app()->environment(), ['local', 'testing'], true)),
+                Rule::prohibitedIf(! DemoMode::available()),
             ],
         ];
     }

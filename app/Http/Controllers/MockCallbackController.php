@@ -7,13 +7,14 @@ use App\Http\Requests\MockCallbackRequest;
 use App\Services\MockCallbackDispatcher;
 use App\Services\MockInsurer;
 use App\Services\PolicyCallback;
+use App\Support\DemoMode;
 use Illuminate\Http\JsonResponse;
 
 class MockCallbackController extends Controller
 {
     public function status(MockInsurer $insurer, string $providerReference): JsonResponse
     {
-        abort_unless(app()->environment(['local', 'testing']), 404);
+        abort_unless(DemoMode::available(), 404);
 
         $policy = $insurer->lookup($providerReference);
         abort_if($policy === null, 404);
@@ -23,7 +24,7 @@ class MockCallbackController extends Controller
 
     public function dispatch(MockCallbackDispatcher $dispatcher, int $id): JsonResponse
     {
-        abort_unless(app()->environment(['local', 'testing']), 404);
+        abort_unless(DemoMode::available(), 404);
 
         try {
             $result = $dispatcher->dispatch($id);

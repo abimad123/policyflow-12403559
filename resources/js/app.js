@@ -91,6 +91,21 @@ if (page === 'index') {
 
 if (page === 'create') {
     const form = $('#create-form');
+    if (document.body.dataset.publicDemo === 'true') {
+        form.elements.client_request_id.value = `DEMO-${crypto.randomUUID()}`;
+        form.elements.agent_id.value = 'DEMO-AGENT';
+        form.elements.customer_name.value = 'Demo Traveler';
+        form.elements.date_of_birth.value = '1990-01-01';
+        const tripStart = new Date();
+        tripStart.setDate(tripStart.getDate() + 1);
+        const tripEnd = new Date(tripStart);
+        tripEnd.setDate(tripEnd.getDate() + 4);
+        form.elements.trip_start.value = tripStart.toISOString().slice(0, 10);
+        form.elements.trip_end.value = tripEnd.toISOString().slice(0, 10);
+        form.elements.destination.value = 'DOMESTIC';
+        form.elements.plan_code.value = 'BASIC';
+        form.elements.sum_insured.value = '100000';
+    }
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         for (const element of form.querySelectorAll('[data-error-for]')) element.textContent = '';

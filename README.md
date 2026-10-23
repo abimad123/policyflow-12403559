@@ -4,7 +4,7 @@ Fault-tolerant insurance issuance and reconciliation engine for the Trippers Shi
 
 ## Status
 
-Stages 2–4 implement intake, premium snapshots, deterministic mock issuance, callbacks, keyed retries, reconciliation, and an audit trail. A local Blade and Tailwind interface demonstrates these APIs. This is a local assessment system with no real insurer connection.
+Stages 2–4 implement intake, premium snapshots, deterministic mock issuance, callbacks, keyed retries, reconciliation, and an audit trail. A Blade and Tailwind interface demonstrates these APIs locally or in an explicitly enabled public evaluator demo. There is no real insurer or payment connection.
 
 ## Local setup
 
@@ -28,15 +28,15 @@ For a repeatable walkthrough, create a request with a fresh `client_request_id` 
 3. **Timeout and reconciliation:** create another request, select `TIMEOUT_AFTER_ISSUE`, and submit. The request becomes `NEEDS_RECONCILIATION` without assuming failure. Choose **Reconcile** to confirm the mock provider record and reach `ISSUED` without resubmission.
 4. **Duplicate callbacks:** create another request, select `DUPLICATE_CALLBACK`, and submit. The request becomes `PENDING_CONFIRMATION`. Choose **Dispatch callback**; three deliveries share one event ID and only the first applies issuance. Choose **Dispatch callback** again to replay the event and inspect the duplicate flags and provider events. `DELAYED_CALLBACK` follows the same path with one delivery per dispatch. A request submitted with `SUCCESS` has no queued callback, so dispatch is disabled; calling that API directly returns a meaningful `409`.
 
-The web UI and mock callback receiver are available only when `APP_ENV` is `local` or `testing`; other environments return `404`. The callback receiver is unauthenticated and must not be exposed as a real insurer integration. The Docker packaging below does not add production authentication. Before hosting on `abijith.me`, inspect the actual hosting environment and add authentication/authorization for policy actions and a verified provider callback scheme. No deployment or DNS change is part of this setup.
+The web UI, scenario selector, mock status lookup, callback dispatch, and callback receiver are available in `local`/`testing`, or in `production` only when `POLICYFLOW_PUBLIC_DEMO=true` and `APP_DEBUG=false`. The public evaluator demo intentionally has no login. Its callback receiver is unauthenticated and exists only for the local mock; never connect it to a real insurer. No deployment or DNS change is part of this repository update.
 
 ## Render Docker deployment preparation
 
-The root [`Dockerfile`](Dockerfile) builds locked npm assets and locked Composer production dependencies, then serves Laravel through Apache with `public/` as the document root. [`docker/start.sh`](docker/start.sh) binds Apache to Render's runtime `PORT` (default `10000`) and refuses to start without `APP_KEY`. The image contains no `.env`, local logs, test data, `node_modules`, or development `vendor` directory; runtime settings and secrets come from Render environment variables. Laravel and Apache write logs to standard error/output. The file system is ephemeral, so the default file session/cache stores are suitable only for a single instance and are lost on restart.
+The root [`Dockerfile`](Dockerfile) builds locked npm assets and locked Composer production dependencies, then serves Laravel through Apache with `public/` as the document root. [`docker/start.sh`](docker/start.sh) binds Apache to Render's runtime `PORT` (default `10000`) and refuses to start without `APP_KEY` or with production `APP_DEBUG` enabled. The image contains no `.env`, local logs, test data, `node_modules`, or development `vendor` directory; runtime settings and secrets come from Render environment variables. Laravel and Apache write logs to standard error/output. The file system is ephemeral, so the default file session/cache stores are suitable only for a single instance and are lost on restart.
 
 These are the **Render settings to use after reviewing and publishing this commit**. No Render service or DNS record is created by this repository change:
 
-1. Confirm Render is connected to the intended GitHub repository. The current local `origin` still points to `policyflow-insurance-engine.git`; verify and correct that separately before using a repository in Render. Create a Render PostgreSQL database and keep its **internal** connection URL private.
+1. Confirm Render is connected to the intended GitHub repository; verify `git remote -v` before connecting it. Create a **dedicated, empty demo PostgreSQL database** containing synthetic records only, and keep its internal connection URL private. Never point the public demo at a development or customer database.
 2. Create a **Web Service** with **Docker** as its runtime. Leave Root Directory blank (repository root); set Dockerfile Path to `./Dockerfile`. Docker services have no separate Build Command. Leave Docker Command blank so the image's `ENTRYPOINT` and `CMD` start Apache. Set Health Check Path to `/up`. Render supplies `PORT`; the image defaults to `10000` if it is absent.
 3. Add environment variables in Render's Environment settings, never in source or Docker build arguments:
 
@@ -44,6 +44,7 @@ These are the **Render settings to use after reviewing and publishing this commi
    | --- | --- |
    | `APP_ENV` | `production` |
    | `APP_DEBUG` | `false` |
+   | `POLICYFLOW_PUBLIC_DEMO` | `true` only after the isolated demo database and schema are ready; defaults to `false`. |
    | `APP_KEY` | One stable key generated locally with `php artisan key:generate --show`; paste it into Render's secret environment setting and do not rotate it casually. |
    | `APP_URL` | The final `https://<service>.onrender.com` URL, then the custom HTTPS URL after domain setup. |
    | `ASSET_URL` | The same HTTPS origin as `APP_URL`, to keep Vite asset links secure behind Render's TLS proxy. |
@@ -54,10 +55,16 @@ These are the **Render settings to use after reviewing and publishing this commi
 
    The image defaults to synchronous jobs and file session/cache storage. Keep `APP_KEY` and `DB_URL` stable across deploys. Do not set `APP_ENV=local` on a publicly reachable service merely to expose mock controls.
 
-4. On a Render plan that supports a **Pre-Deploy Command**, set it to `php artisan migrate --force`. It applies pending migrations before traffic moves to the new image; it does not run `migrate:fresh`, truncate tables, or seed data. Review every future migration for backward compatibility because the previous image may serve traffic while migrations run. Render's pre-deploy command runs on a separate instance, so only database changes persist. If your plan lacks pre-deploy commands, arrange a controlled one-off migration before exposing the new version; do not silently run migrations in every web container start.
-5. After a deployment is deliberately approved, check `/up`, inspect Render logs, verify a read-only policy list against the new database, and only then exercise write endpoints with fabricated data. `/up` proves HTTP readiness, not PostgreSQL connectivity. The public `/` UI and mock callback receiver intentionally return `404` in production.
+4. Leave Render's **Pre-Deploy Command blank**. The Docker entrypoint does not run migrations. Provision the required schema in a separate, isolated preparation environment before connecting the production web service; verify the schema and data are synthetic before setting `POLICYFLOW_PUBLIC_DEMO=true`. Never run `php artisan migrate` or `migrate:fresh` against the production database.
+5. After deployment is separately approved, check `/up`, inspect Render logs, then verify the dashboard and a read-only API list against the dedicated demo database. `/up` proves HTTP readiness, not PostgreSQL connectivity. Use the synthetic form values described below for write demonstrations.
 
-**Public launch is blocked by application access control:** the existing policy APIs have no production authentication or authorization, and the Blade demo is deliberately local-only. The Docker image and port behavior were tested locally, but a live Render database, Render environment settings, authentication design, and custom domain were not verified. Add production API/UI access control and review the callback trust model before making a public service or attaching `abijith.me`.
+### Public evaluator demo
+
+With the opt-in enabled, anonymous evaluators can use `/` for the dashboard, `/policies/new` for intake, and `/policies/{id}` for details and lifecycle actions. The form generates a `DEMO-<UUID>` idempotency key and fills `DEMO-AGENT` and `Demo Traveler`. Production intake rejects other identity values with HTTP `422`; use invented dates only. The same validation applies to direct API intake. Only synthetic data belongs in the dedicated demo database, because the public list and detail APIs show its stored rows to anyone.
+
+To demonstrate reliability, create a fresh request for each scenario. Select `SUCCESS` for immediate issuance; `TEMPORARY_FAILURE` then `SUCCESS` on **Retry** for recovery; `TIMEOUT_AFTER_ISSUE` then **Reconcile** for an uncertain outcome; and `DELAYED_CALLBACK` or `DUPLICATE_CALLBACK` then **Dispatch callback** for callback delivery. Dispatch a second time to see an idempotent duplicate. The mock status lookup and `POST /api/mock-insurer/callback` are also available for direct API demonstration. A dispatch without a queued callback returns HTTP `409`, including after `SUCCESS`; this is an expected conflict.
+
+Production limits requests per source IP to 120 reads and 20 writes per minute; excess traffic receives HTTP `429`. These counters use Laravel's configured cache. The image defaults to file cache, so limits are per instance and reset on restart; use a shared cache and an upstream edge limit if deploying multiple instances. The public demo has no login, so evaluators can see and change each other's synthetic records. The callback is unauthenticated and must never be used for a real provider. This is an assessment demo, not a production insurance system. Live Render settings, database isolation, schema setup, and any custom domain remain to be verified before launch.
 
 ## Local PostgreSQL bootstrap and API checks
 
@@ -129,7 +136,7 @@ Submitting the same `agent_id` and `client_request_id` again returns HTTP `200` 
 
 ## Insurer submission API
 
-`POST /api/policy-requests/{id}/submit` accepts a `VALIDATED` request and defaults to the local mock's `SUCCESS` scenario. In local and testing environments, the optional `scenario` field accepts `SUCCESS`, `TEMPORARY_FAILURE`, `TIMEOUT_AFTER_ISSUE`, `DELAYED_CALLBACK`, or `DUPLICATE_CALLBACK`. A new successful submission returns HTTP `200` with `ISSUED`, a provider reference, and a unique policy number. A temporary failure returns HTTP `200` with `FAILED` and no policy number. A timeout after internal issuance returns `NEEDS_RECONCILIATION`; delayed and duplicate callback scenarios return `PENDING_CONFIRMATION`. The mock does not sleep or dispatch callbacks automatically. A missing ID returns `404`, a non-submittable state returns `409`, and an unsupported scenario returns `422`.
+`POST /api/policy-requests/{id}/submit` accepts a `VALIDATED` request and defaults to the mock's `SUCCESS` scenario. In local/testing and the enabled public demo, the optional `scenario` field accepts `SUCCESS`, `TEMPORARY_FAILURE`, `TIMEOUT_AFTER_ISSUE`, `DELAYED_CALLBACK`, or `DUPLICATE_CALLBACK`. A new successful submission returns HTTP `200` with `ISSUED`, a provider reference, and a unique policy number. A temporary failure returns HTTP `200` with `FAILED` and no policy number. A timeout after internal issuance returns `NEEDS_RECONCILIATION`; delayed and duplicate callback scenarios return `PENDING_CONFIRMATION`. The mock does not sleep or dispatch callbacks automatically. A missing ID returns `404`, a non-submittable state returns `409`, and an unsupported scenario returns `422`.
 
 The response envelope is always `{"data":{...}}` for a processed submission. `data` contains every persisted intake field and timestamp, plus `provider_reference`, `last_provider_response`, `submission_attempt_count`, `policy_number`, `state_history`, `issuance_attempts`, and `provider_events`. The history entries contain `previous_state`, `new_state`, `context`, and `occurred_at`; attempt entries contain `attempt_number`, `retry_key`, `scenario`, `result`, `provider_reference`, `response`, and timestamps. The following examples show selected fields; IDs and timestamps vary.
 
@@ -161,7 +168,7 @@ The mock is an in-process function with no network call or sleep. Submission loc
 
 ## Retry, callback, and reconciliation APIs
 
-After a temporary failure, `POST /api/policy-requests/{id}/retry` requires a caller-chosen `retry_key` (up to 100 characters). Repeating a key returns the current request without another attempt. A new key makes a new attempt only from `FAILED`. The optional local/testing `scenario` flag has the same values as submit. For example:
+After a temporary failure, `POST /api/policy-requests/{id}/retry` requires a caller-chosen `retry_key` (up to 100 characters). Repeating a key returns the current request without another attempt. A new key makes a new attempt only from `FAILED`. The optional `scenario` flag is available in local/testing or the enabled public demo and has the same values as submit. For example:
 
 ```json
 {"retry_key":"agent-17-retry-1","scenario":"SUCCESS"}
@@ -169,7 +176,7 @@ After a temporary failure, `POST /api/policy-requests/{id}/retry` requires a cal
 
 The response is `{"data":{...}}` with HTTP `200`; `409` means the state cannot be retried, and `422` means invalid input. An already issued request returns its current record without a new attempt. Keep a retry key stable when resending the same HTTP operation.
 
-For `DELAYED_CALLBACK` or `DUPLICATE_CALLBACK`, first submit the request, then call `POST /api/mock-insurer/policy-requests/{id}/dispatch-callbacks` in local/testing. This dispatches one event for `DELAYED_CALLBACK` and the same event three times for `DUPLICATE_CALLBACK`; repeating dispatch replays the same event ID safely. The response includes `data` and a `deliveries` array with each delivery's `duplicate` flag. `GET /api/mock-insurer/status/{provider_reference}` exposes the mock's internal policy in local/testing for inspection.
+For `DELAYED_CALLBACK` or `DUPLICATE_CALLBACK`, first submit the request, then call `POST /api/mock-insurer/policy-requests/{id}/dispatch-callbacks` in local/testing or the enabled public demo. This dispatches one event for `DELAYED_CALLBACK` and the same event three times for `DUPLICATE_CALLBACK`; repeating dispatch replays the same event ID safely. The response includes `data` and a `deliveries` array with each delivery's `duplicate` flag. `GET /api/mock-insurer/status/{provider_reference}` exposes the mock's internal policy in those same demo environments for inspection.
 
 To exercise callback validation directly, retrieve the mock policy number from that status endpoint and send an event to `POST /api/mock-insurer/callback`:
 
@@ -182,7 +189,7 @@ To exercise callback validation directly, retrieve the mock policy number from t
 }
 ```
 
-The callback verifies the reference and policy number against the mock's internal record. It returns HTTP `200` with `{"data":{...},"event_id":"mock-event-1","duplicate":false}`. Repeating the event or sending another matching issued event returns `duplicate:true` and does not issue again. Invalid fields return `422`, unknown references return `404`, and conflicting events or states return `409`. The callback route is an unauthenticated **local mock** endpoint restricted to local/testing environments; it needs provider authentication before any real integration.
+The callback verifies the reference and policy number against the mock's internal record. It returns HTTP `200` with `{"data":{...},"event_id":"mock-event-1","duplicate":false}`. Repeating the event or sending another matching issued event returns `duplicate:true` and does not issue again. Invalid fields return `422`, unknown references return `404`, and conflicting events or states return `409`. The callback route is an unauthenticated **mock demo** endpoint available in local/testing or the enabled public demo; it needs provider authentication before any real integration.
 
 Call `POST /api/policy-requests/{id}/reconcile` to query the local provider record after a timeout or pending response. A confirmed policy returns HTTP `200` with `{"data":{...},"resolved":true}` and transitions to `ISSUED`. If the mock lookup is unavailable or returns no record, HTTP `202` returns `resolved:false` and preserves the uncertain state; it never assumes a missing answer means failure. Invalid states return `409`. Repeating reconciliation after issuance returns the existing record.
 
@@ -198,4 +205,4 @@ The API controller delegates validation to a Form Request and intake to a servic
 
 ## Assumptions and limitations
 
-The provided insurer is fictional; no real insurer or payment service is used. Duplicate intake submissions are identified by agent and client request ID; other valid fields on a duplicate are ignored and the original premium snapshot is returned. The local mock stores its provider state in the same PostgreSQL database as the application, so it cannot model an independent provider outage or cross-system commit boundary. Callbacks require explicit local dispatch; there is no queue, scheduler, automatic retry, or background reconciliation worker. Reconciliation is an explicit API operation. The local Windows PostgreSQL service occupies port 5432, so the Docker container is published on port 5433.
+The provided insurer is fictional; no real insurer or payment service is used. Duplicate intake submissions are identified by agent and client request ID; other valid fields on a duplicate are ignored and the original premium snapshot is returned. The local mock stores its provider state in the same PostgreSQL database as the application, so it cannot model an independent provider outage or cross-system commit boundary. Callbacks require explicit demo dispatch; there is no queue, scheduler, automatic retry, or background reconciliation worker. Reconciliation is an explicit API operation. The local Windows PostgreSQL service occupies port 5432, so the Docker container is published on port 5433.
