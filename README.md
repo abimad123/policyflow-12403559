@@ -34,6 +34,8 @@ The homepage is public in production. The creation/detail pages and synthetic de
 
 The root [`Dockerfile`](Dockerfile) builds locked npm assets and locked Composer production dependencies, then serves Laravel through Apache with `public/` as the document root. [`docker/start.sh`](docker/start.sh) binds Apache to Render's runtime `PORT` (default `10000`) and refuses to start without `APP_KEY` or with production `APP_DEBUG` enabled. The image contains no `.env`, local logs, test data, `node_modules`, or development `vendor` directory; runtime settings and secrets come from Render environment variables. Laravel and Apache write logs to standard error/output. The file system is ephemeral, so the default file session/cache stores are suitable only for a single instance and are lost on restart.
 
+Production Vite links use same-origin `/build/...` paths, so assets follow the browser's HTTPS origin even if Render's proxy reports HTTP to PHP. The live site previously emitted `http://.../build/...` links; the CSS and JS files themselves were available over HTTPS. Set both `APP_URL` and `ASSET_URL` to the final HTTPS origin as well. A page stuck on “Loading requests…” usually means its JavaScript was blocked; the rebuilt UI also shows a retryable error if the API or response format fails.
+
 These are the **Render settings to use after reviewing and publishing this commit**. No Render service or DNS record is created by this repository change:
 
 1. Confirm Render is connected to the intended GitHub repository; verify `git remote -v` before connecting it. Create a **dedicated, empty demo PostgreSQL database** containing synthetic records only, and keep its internal connection URL private. Never point the public demo at a development or customer database.
@@ -58,6 +60,8 @@ These are the **Render settings to use after reviewing and publishing this commi
 
 4. Leave Render's **Pre-Deploy Command blank**. The Docker entrypoint does not run migrations. Provision the required schema in a separate, isolated preparation environment before connecting the production web service; verify the schema and data are synthetic before setting `POLICYFLOW_PUBLIC_DEMO=true`. Never run `php artisan migrate` or `migrate:fresh` against the production database.
 5. After deployment is separately approved, check `/up`, `/`, and `GET /api/policy-requests` in that order. `/up` proves HTTP readiness, not PostgreSQL connectivity. A `500` from the list means the Render database connection or schema still needs attention. Use `php artisan migrate:status` in a Render shell as a read-only schema check; do not run migrations in production. Resolve database connectivity before enabling the demo or sharing the write token.
+
+   If the list returns HTTP `200` with `demo_enabled:false` and an empty `data` array, that is the intentional read-only state while `POLICYFLOW_PUBLIC_DEMO=false`; it does not verify PostgreSQL. After enabling the demo, repeat the list request and check Render's application logs plus `php artisan migrate:status` for connection/schema failures. Do not print `DB_URL` or other secret values in logs or support requests.
 
 ### Public evaluator demo
 

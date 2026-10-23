@@ -27,10 +27,13 @@ const statusTone = {
 const pill = (status) => `<span class="status-pill ${statusTone[status] ?? statusTone.RECEIVED}">${safe(status)}</span>`;
 
 async function api(path, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
     try {
         const writeToken = publicDemo && options.method === 'POST' ? sessionStorage.getItem(demoTokenKey) : null;
         const response = await fetch(`/api${path}`, {
             ...options,
+            signal: controller.signal,
             headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...options.headers, ...(writeToken ? { 'X-PolicyFlow-Demo-Token': writeToken } : {}) },
         });
         const body = response.status >= 500
@@ -38,7 +41,9 @@ async function api(path, options = {}) {
             : await response.json();
         return { status: response.status, ok: response.ok, body };
     } catch (error) {
-        return { status: 0, ok: false, body: { message: `Network error: ${error.message}` } };
+        return { status: 0, ok: false, body: { message: error.name === 'AbortError' ? 'The request timed out. Please try again.' : 'Unable to reach the policy API. Please try again.' } };
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
@@ -69,7 +74,15 @@ if (page === 'index') {
         $('#policy-rows').innerHTML = '<tr><td colspan="7" class="px-5 py-12 text-center text-slate-500">Loading requests…</td></tr>';
         const query = new URLSearchParams({ page: String(currentPage), per_page: '15' });
         if (statusFilter.value) query.set('status', statusFilter.value);
-        const result = await api(`/policy-requests?${query}`);
+        let result;
+        try {
+            result = await api(`/policy-requests?${query}`);
+            if (result.ok && (!Array.isArray(result.body.data) || !result.body.pagination)) {
+                result = { status: result.status, ok: false, body: { message: 'The policy list returned an unexpected response.' } };
+            }
+        } catch {
+            result = { status: 0, ok: false, body: { message: 'Policy data is temporarily unavailable. Please try again later.' } };
+        }
         $('#list-http-status').textContent = `HTTP ${result.status || 'network error'}`;
         $('#list-json').textContent = pretty(result.body);
         if (!result.ok) {
@@ -95,6 +108,8 @@ if (page === 'index') {
         }
         loading = false;
         $('#refresh-list').disabled = false;
+        $('#previous-page').disabled = !result.ok || result.body.pagination.current_page <= 1;
+        $('#next-page').disabled = !result.ok || result.body.pagination.current_page >= result.body.pagination.last_page;
     }
 
     statusFilter.addEventListener('change', () => { currentPage = 1; loadList(); });
