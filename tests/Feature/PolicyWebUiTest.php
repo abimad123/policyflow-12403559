@@ -69,7 +69,7 @@ class PolicyWebUiTest extends TestCase
         app()->detectEnvironment(fn () => 'production');
 
         try {
-            $this->postJson('/api/mock-insurer/callback', [])->assertNotFound();
+            $this->postJson('/api/mock-insurer/callback', [])->assertForbidden();
         } finally {
             app()->detectEnvironment(fn () => $original);
         }
