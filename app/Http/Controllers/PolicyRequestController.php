@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StorePolicyRequestRequest;
 use App\Models\PolicyRequest;
 use App\Services\PolicyRequestIntake;
-use App\Support\DemoMode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,16 +27,7 @@ class PolicyRequestController extends Controller
             'page' => ['sometimes', 'integer', 'min:1'],
         ]);
 
-        if (app()->environment('production') && ! DemoMode::public()) {
-            return response()->json([
-                'data' => [],
-                'pagination' => ['current_page' => 1, 'last_page' => 1, 'per_page' => $filters['per_page'] ?? 15, 'total' => 0],
-                'demo_enabled' => false,
-            ]);
-        }
-
         $page = PolicyRequest::query()
-            ->when(app()->environment('production'), fn ($query) => DemoMode::syntheticPolicies($query))
             ->when(isset($filters['status']), fn ($query) => $query->where('status', $filters['status']))
             ->orderByDesc('id')
             ->paginate($filters['per_page'] ?? 15);
@@ -55,13 +45,8 @@ class PolicyRequestController extends Controller
 
     public function show(int $id): JsonResponse
     {
-        abort_if(app()->environment('production') && ! DemoMode::public(), 404);
-
         return response()->json([
-            'data' => PolicyRequest::query()
-                ->when(app()->environment('production'), fn ($query) => DemoMode::syntheticPolicies($query))
-                ->with(['stateHistory', 'issuanceAttempts', 'providerEvents'])
-                ->findOrFail($id),
+            'data' => PolicyRequest::query()->with(['stateHistory', 'issuanceAttempts', 'providerEvents'])->findOrFail($id),
         ]);
     }
 
