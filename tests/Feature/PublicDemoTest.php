@@ -20,6 +20,8 @@ class PublicDemoTest extends TestCase
         app()->detectEnvironment(fn () => 'production');
         config()->set('app.debug', false);
         config()->set('policyflow.public_demo_enabled', true);
+        config()->set('policyflow.demo_write_token', 'test-write-token-with-at-least-32-characters');
+        $this->withHeader('X-PolicyFlow-Demo-Token', 'test-write-token-with-at-least-32-characters');
     }
 
     protected function tearDown(): void
@@ -46,11 +48,13 @@ class PublicDemoTest extends TestCase
     public function test_public_demo_is_opt_in_and_requires_debug_off(): void
     {
         config()->set('policyflow.public_demo_enabled', false);
-        $this->get('/')->assertNotFound();
-        $this->postJson('/api/mock-insurer/callback', [])->assertNotFound();
+        $this->get('/')->assertOk();
+        $this->get('/policies/new')->assertNotFound();
+        $this->postJson('/api/mock-insurer/callback', [])->assertForbidden();
         config()->set('policyflow.public_demo_enabled', true);
         config()->set('app.debug', true);
-        $this->get('/')->assertNotFound();
+        $this->get('/')->assertOk();
+        $this->get('/policies/new')->assertNotFound();
         config()->set('app.debug', false);
         $this->get('/')->assertOk()->assertSee('Mock demo');
         $this->get('/policies/new')->assertOk()->assertSee('Never enter real customer data');

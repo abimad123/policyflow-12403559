@@ -2,6 +2,18 @@ import './bootstrap';
 
 const $ = (selector) => document.querySelector(selector);
 const page = document.body.dataset.page;
+const publicDemo = document.body.dataset.publicDemo === 'true';
+const demoTokenKey = 'policyflow-demo-write-token';
+const hasWriteToken = () => !publicDemo || Boolean(sessionStorage.getItem(demoTokenKey));
+const tokenInput = $('#demo-write-token');
+if (tokenInput) {
+    tokenInput.value = sessionStorage.getItem(demoTokenKey) ?? '';
+    tokenInput.addEventListener('input', () => {
+        const token = tokenInput.value.trim();
+        token ? sessionStorage.setItem(demoTokenKey, token) : sessionStorage.removeItem(demoTokenKey);
+        document.dispatchEvent(new Event('demo-write-changed'));
+    });
+}
 const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(value ?? 0));
 const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const pretty = (value) => JSON.stringify(value, null, 2);
@@ -16,11 +28,14 @@ const pill = (status) => `<span class="status-pill ${statusTone[status] ?? statu
 
 async function api(path, options = {}) {
     try {
+        const writeToken = publicDemo && options.method === 'POST' ? sessionStorage.getItem(demoTokenKey) : null;
         const response = await fetch(`/api${path}`, {
             ...options,
-            headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...options.headers },
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...options.headers, ...(writeToken ? { 'X-PolicyFlow-Demo-Token': writeToken } : {}) },
         });
-        const body = await response.json();
+        const body = response.status >= 500
+            ? { message: 'Policy data is temporarily unavailable. Please try again later.' }
+            : await response.json();
         return { status: response.status, ok: response.ok, body };
     } catch (error) {
         return { status: 0, ok: false, body: { message: `Network error: ${error.message}` } };
@@ -58,7 +73,7 @@ if (page === 'index') {
         $('#list-http-status').textContent = `HTTP ${result.status || 'network error'}`;
         $('#list-json').textContent = pretty(result.body);
         if (!result.ok) {
-            $('#policy-rows').innerHTML = '<tr><td colspan="7" class="px-5 py-12 text-center text-rose-600">Could not load requests. Use Refresh to try again.</td></tr>';
+            $('#policy-rows').innerHTML = '<tr><td colspan="7" class="px-5 py-12 text-center text-rose-600">Policy data is temporarily unavailable. Use Refresh to try again.</td></tr>';
             notice(result.body.message ?? 'Could not load policy requests.', false);
         } else {
             const { data, pagination } = result.body;
@@ -72,7 +87,7 @@ if (page === 'index') {
                 <td class="px-5 py-4"><div class="font-medium">${safe(policy.customer_name)}</div><div class="mt-1 text-xs text-slate-500">${safe(policy.destination)} · ${date(policy.trip_start)} to ${date(policy.trip_end)}</div></td>
                 <td class="px-5 py-4 font-semibold tabular-nums">${money(policy.premium_amount)}</td><td class="px-5 py-4 tabular-nums">${policy.submission_attempt_count ?? 0}</td>
                 <td class="px-5 py-4 font-mono text-xs">${safe(policy.policy_number ?? '—')}</td><td class="px-5 py-4">${pill(policy.status)}</td>
-                <td class="px-5 py-4 text-right"><a href="/policies/${policy.id}" class="text-sm font-semibold text-indigo-600 hover:underline">View →</a></td></tr>`).join('') : '<tr><td colspan="7" class="px-5 py-12 text-center text-slate-500">No requests match this filter.</td></tr>';
+                <td class="px-5 py-4 text-right"><a href="/policies/${policy.id}" class="text-sm font-semibold text-indigo-600 hover:underline">View →</a></td></tr>`).join('') : `<tr><td colspan="7" class="px-5 py-12 text-center text-slate-500">${result.body.demo_enabled === false ? 'Demo records are not enabled yet.' : statusFilter.value ? 'No requests match this filter.' : 'No demo requests yet.'}</td></tr>`;
             const nextUrl = new URL(location.href);
             statusFilter.value ? nextUrl.searchParams.set('status', statusFilter.value) : nextUrl.searchParams.delete('status');
             currentPage > 1 ? nextUrl.searchParams.set('page', String(currentPage)) : nextUrl.searchParams.delete('page');
@@ -91,6 +106,9 @@ if (page === 'index') {
 
 if (page === 'create') {
     const form = $('#create-form');
+    const updateCreateAccess = () => { $('#create-submit').disabled = !hasWriteToken(); };
+    document.addEventListener('demo-write-changed', updateCreateAccess);
+    updateCreateAccess();
     if (document.body.dataset.publicDemo === 'true') {
         form.elements.client_request_id.value = `DEMO-${crypto.randomUUID()}`;
         form.elements.agent_id.value = 'DEMO-AGENT';
@@ -108,6 +126,7 @@ if (page === 'create') {
     }
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (!hasWriteToken()) { notice('Enter the evaluator write token before creating a request.', false); return; }
         for (const element of form.querySelectorAll('[data-error-for]')) element.textContent = '';
         const button = $('#create-submit');
         setBusy(button, true, 'Create request');
@@ -131,6 +150,7 @@ if (page === 'create') {
             notice(result.body.message ?? 'Could not create request.', false);
         }
         setBusy(button, false, 'Create request');
+        updateCreateAccess();
     });
 }
 
@@ -167,10 +187,10 @@ if (page === 'show') {
         renderItems('#provider-events', policy.provider_events, (event) => `<div class="rounded-xl border border-slate-100 bg-slate-50 p-3"><strong class="text-sm">${safe(event.event_type)}</strong><p class="mt-1 break-all text-xs text-slate-600">${safe(event.event_id)}</p><p class="mt-1 text-xs text-slate-500">${event.applied ? 'Applied' : 'Duplicate / ignored'} · ${safe(time(event.created_at))}</p></div>`);
         const lastScenario = policy.issuance_attempts?.at(-1)?.scenario;
         const canDispatch = ['DELAYED_CALLBACK', 'DUPLICATE_CALLBACK'].includes(lastScenario) && ['PENDING_CONFIRMATION', 'ISSUED'].includes(policy.status);
-        $('#action-submit').disabled = busy || policy.status !== 'VALIDATED';
-        $('#action-retry').disabled = busy || policy.status !== 'FAILED';
-        $('#action-reconcile').disabled = busy || !['NEEDS_RECONCILIATION', 'PENDING_CONFIRMATION'].includes(policy.status);
-        $('#action-dispatch').disabled = busy || !canDispatch;
+        $('#action-submit').disabled = busy || !hasWriteToken() || policy.status !== 'VALIDATED';
+        $('#action-retry').disabled = busy || !hasWriteToken() || policy.status !== 'FAILED';
+        $('#action-reconcile').disabled = busy || !hasWriteToken() || !['NEEDS_RECONCILIATION', 'PENDING_CONFIRMATION'].includes(policy.status);
+        $('#action-dispatch').disabled = busy || !hasWriteToken() || !canDispatch;
         $('#action-hint').textContent = canDispatch && policy.status === 'ISSUED'
             ? 'Dispatch again to replay the same callback event; issuance stays unchanged.'
             : policy.status === 'ISSUED' ? 'Issued is terminal. No new submission is allowed.'
@@ -179,6 +199,8 @@ if (page === 'show') {
                         : policy.status === 'PENDING_CONFIRMATION' ? 'Dispatch a queued callback or reconcile the pending provider outcome.'
                             : 'Choose a mock scenario, then submit this validated request.';
     }
+
+    document.addEventListener('demo-write-changed', () => { if (policy) render(policy); });
 
     async function loadDetail() {
         if (busy) return;

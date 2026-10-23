@@ -7,7 +7,7 @@
     <title>@yield('title', 'Dashboard') · PolicyFlow</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body data-page="@yield('page')" data-public-demo="{{ \App\Support\DemoMode::public() ? 'true' : 'false' }}" @hasSection('policy-id') data-policy-id="@yield('policy-id')" @endif>
+<body data-page="@yield('page')" data-public-demo="{{ \App\Support\DemoMode::public() ? 'true' : 'false' }}" data-production="{{ app()->environment('production') ? 'true' : 'false' }}" @hasSection('policy-id') data-policy-id="@yield('policy-id')" @endif>
     <div class="min-h-screen lg:flex">
         <aside class="border-b border-slate-200 bg-white lg:fixed lg:inset-y-0 lg:w-64 lg:border-b-0 lg:border-r">
             <div class="flex h-18 items-center justify-between px-5 lg:px-7">
@@ -19,7 +19,7 @@
             </div>
             <nav aria-label="Main navigation" class="flex gap-2 px-4 pb-4 lg:mt-8 lg:flex-col lg:pb-0">
                 <a href="{{ route('policies.index') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.index') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">Overview</a>
-                <a href="{{ route('policies.create') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.create') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">New policy request</a>
+                @if (\App\Support\DemoMode::available())<a href="{{ route('policies.create') }}" class="rounded-lg px-4 py-2.5 text-sm font-medium {{ request()->routeIs('policies.create') ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50' }}">New policy request</a>@endif
             </nav>
             <div class="hidden border-t border-slate-100 px-7 py-5 text-xs leading-5 text-slate-500 lg:absolute lg:bottom-0 lg:block">
                 Mock insurer demonstration.<br>Use synthetic data only; records persist in the demo database.
@@ -29,9 +29,20 @@
         <div class="min-w-0 flex-1 lg:ml-64">
             <header class="flex min-h-18 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
                 <div><p class="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600">Issuance & reconciliation</p><h1 class="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">@yield('heading')</h1></div>
-                <a href="{{ route('policies.create') }}" class="btn-primary hidden sm:inline-flex">+ New request</a>
+                @if (\App\Support\DemoMode::available())<a href="{{ route('policies.create') }}" class="btn-primary hidden sm:inline-flex">+ New request</a>@endif
             </header>
             <main class="mx-auto max-w-7xl space-y-6 px-5 py-7 sm:px-8 sm:py-9">
+                @if (app()->environment('production'))
+                    @if (\App\Support\DemoMode::public())
+                        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                            <strong>Public synthetic demo.</strong> Browsing is open. To use mock write actions, enter the evaluator token supplied separately by the demo owner. Never enter real customer data.
+                            <label class="mt-3 block max-w-md"><span class="field-label">Evaluator write token</span><input id="demo-write-token" type="password" autocomplete="off" class="field" placeholder="Required for create and lifecycle actions"></label>
+                            <p class="mt-2 text-xs">The token stays in this browser tab and is sent only with demo API actions.</p>
+                        </div>
+                    @else
+                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">Public browsing is available. Demo records and write actions are not enabled yet.</div>
+                    @endif
+                @endif
                 <div id="notice" role="status" aria-live="polite" class="hidden rounded-xl border px-4 py-3 text-sm"></div>
                 @yield('content')
             </main>
