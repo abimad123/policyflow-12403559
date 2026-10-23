@@ -1,9 +1,9 @@
 <?php
 
-use App\Http\Controllers\PolicyRequestController;
-use App\Http\Controllers\PolicyReliabilityController;
-use App\Http\Controllers\PolicySubmissionController;
 use App\Http\Controllers\MockCallbackController;
+use App\Http\Controllers\PolicyReliabilityController;
+use App\Http\Controllers\PolicyRequestController;
+use App\Http\Controllers\PolicySubmissionController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/policy-requests', [PolicyRequestController::class, 'store']);

@@ -139,6 +139,10 @@ Call `POST /api/policy-requests/{id}/reconcile` to query the local provider reco
 
 ## Architecture direction
 
+### Implemented reliability cases
+
+All four mandatory reliability examples are implemented: (1) duplicate intake uses the `(agent_id, client_request_id)` database key and returns the original request; (2) timeout after internal issuance stays uncertain until provider lookup or a matching callback confirms it; (3) duplicate callbacks share a unique provider event ID and apply issuance once; and (4) temporary failures use keyed retries while preserving the premium snapshot. `PolicyRequestIntakeTest`, `PolicySubmissionTest`, and `PolicyReliabilityTest` demonstrate these cases against PostgreSQL. The suite checks deterministic duplicates and database constraints, but it does not run simultaneous HTTP requests or model an independent insurer database.
+
 The API controller delegates validation to a Form Request and intake to a service. A separate calculator uses integer paise and scaled integer multipliers, then stores a two-decimal premium snapshot. Intake first looks up the `(agent_id, client_request_id)` pair; Laravel's `firstOrCreate` catches a database unique-key race and reads the winning row. The composite database constraint is the final safeguard. PostgreSQL's normal committed-read behavior lets a competing insert wait for the winner, then return its row. Submission has a separate service, state machine, and mock insurer. PostgreSQL JSONB stores mock responses and non-sensitive audit context; relational tables store attempt and transition history. The nullable `policy_number` has a database unique constraint.
 
 ## Assumptions and limitations

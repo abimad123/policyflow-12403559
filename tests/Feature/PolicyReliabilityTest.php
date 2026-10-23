@@ -190,6 +190,9 @@ class PolicyReliabilityTest extends TestCase
             ->assertJsonPath('data.submission_attempt_count', 3)->json('data');
         $this->postJson("/api/policy-requests/{$id}/retry", ['retry_key' => 'retry-2'])
             ->assertOk()->assertJsonPath('data.policy_number', $issued['policy_number']);
+        $this->postJson("/api/policy-requests/{$id}/retry", ['retry_key' => 'retry-3', 'scenario' => 'TEMPORARY_FAILURE'])
+            ->assertOk()->assertJsonPath('data.policy_number', $issued['policy_number'])
+            ->assertJsonPath('data.submission_attempt_count', 3);
 
         $this->assertDatabaseCount('issuance_attempts', 3);
         $this->assertDatabaseCount('mock_provider_policies', 1);
@@ -209,6 +212,38 @@ class PolicyReliabilityTest extends TestCase
             ->assertJsonPath('pagination.total', 1);
         $this->getJson('/api/policy-requests?status=NOT_A_STATE')->assertUnprocessable();
         $this->getJson('/api/policy-requests/999999')->assertNotFound();
+    }
+
+    public function test_status_filter_and_pagination_keep_stable_order_and_counts(): void
+    {
+        $issuedId = $this->intake('ISSUED-REQUEST');
+        $failedId = $this->intake('FAILED-REQUEST');
+        $validatedId = $this->intake('VALIDATED-REQUEST');
+        $this->postJson("/api/policy-requests/{$issuedId}/submit")->assertOk();
+        $this->postJson("/api/policy-requests/{$failedId}/submit", ['scenario' => 'TEMPORARY_FAILURE'])->assertOk();
+
+        $this->getJson('/api/policy-requests?status=VALIDATED')
+            ->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $validatedId)
+            ->assertJsonPath('pagination.total', 1);
+        $this->getJson('/api/policy-requests?status=ISSUED')
+            ->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $issuedId);
+
+        foreach ([1 => $validatedId, 2 => $failedId, 3 => $issuedId] as $page => $expectedId) {
+            $this->getJson("/api/policy-requests?per_page=1&page={$page}")
+                ->assertOk()->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.id', $expectedId)
+                ->assertJsonPath('pagination.current_page', $page)
+                ->assertJsonPath('pagination.last_page', 3)
+                ->assertJsonPath('pagination.total', 3);
+        }
+
+        $this->getJson('/api/policy-requests?per_page=1&page=4')
+            ->assertOk()->assertJsonCount(0, 'data')
+            ->assertJsonPath('pagination.total', 3);
+        $this->getJson('/api/policy-requests?per_page=101')->assertUnprocessable();
+        $this->getJson('/api/policy-requests?page=0')->assertUnprocessable();
     }
 
     public function test_provider_reference_and_policy_number_have_database_unique_constraints(): void
